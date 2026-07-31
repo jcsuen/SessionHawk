@@ -62,6 +62,14 @@ for agent in com.sessionhawk.app com.sessionhawk.feeder; do
     launchctl load "$HOME/Library/LaunchAgents/$agent.plist"
 done
 
+# Anonymous install ping: app version only; country is aggregated at the
+# edge, no IPs or identifiers are stored. Skip with SESSIONHAWK_NO_TELEMETRY=1.
+if [ -z "${SESSIONHAWK_NO_TELEMETRY:-}" ]; then
+    v=$(defaults read "$APP/Contents/Info" CFBundleShortVersionString 2>/dev/null || echo "0")
+    curl -fsSL -m 5 "https://paulobuilds.com/sessionhawk/version?install=1&v=$v" -o /dev/null 2>/dev/null || true
+    echo "▸ Sent anonymous install ping (app version + country only — set SESSIONHAWK_NO_TELEMETRY=1 to skip)"
+fi
+
 echo ""
 echo "✅ SessionHawk installed — look for the hawk in your menu bar."
 echo "   • Grant the notification permission when macOS asks."

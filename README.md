@@ -32,6 +32,7 @@ Running four Claude Code sessions, a Gemini CLI, and a Codex agent across a doze
 - **🔍 Auto-discovery** — finds running `claude`, `gemini`, `codex`, and `cursor-agent` processes automatically. No per-session setup.
 - **🧠 Self-correcting states** — Working / Input Needed / Idle reconciled from transcript activity every 30 seconds, so a missed event never leaves a stale badge. Sessions waiting on background tasks aren't falsely flagged as needing you.
 - **🪶 Native and lightweight** — pure SwiftUI + Network framework. No Electron, no dependencies, ~500 KB binary.
+- **⬆️ Update notice** — the app checks daily for new releases and shows a one-click update banner.
 
 ## How it works
 
@@ -103,6 +104,10 @@ Claude Code gets the deep integration because it exposes lifecycle hooks and on-
 | `/v1/sessions` | GET | Current sessions as JSON |
 
 States: `working`, `waitingForInput`, `idle`, `error`. Providers: `claude`, `gemini`, `codex`, `cursor`, `custom`.
+
+## Privacy
+
+The update check (daily, and once at install) requests `paulobuilds.com/sessionhawk/version` with **the app version string only**. Country-level counts are aggregated at the edge; no IPs, machine identifiers, usernames, or paths are sent or stored. Opt out of the install ping with `SESSIONHAWK_NO_TELEMETRY=1`; the app's update check can be silenced by blocking `paulobuilds.com` — nothing breaks. Session data (what your agents are doing) **never leaves your machine** — the IPC server binds to localhost only.
 
 ## Support
 

@@ -2,6 +2,7 @@ import SwiftUI
 
 public struct MenuBarView: View {
     var sessionManager: SessionManager
+    var updateChecker: UpdateChecker? = nil
     @State private var selectedSession: AgentSession? = nil
     // MenuBarExtra windows cannot be drag-resized on macOS, so the size is a
     // persisted preference instead.
@@ -31,8 +32,9 @@ public struct MenuBarView: View {
 
     private var size: WindowSize { WindowSize(rawValue: windowSize) ?? .medium }
 
-    public init(sessionManager: SessionManager) {
+    public init(sessionManager: SessionManager, updateChecker: UpdateChecker? = nil) {
         self.sessionManager = sessionManager
+        self.updateChecker = updateChecker
     }
     
     public var body: some View {
@@ -67,7 +69,28 @@ public struct MenuBarView: View {
                 .background(Color(NSColor.windowBackgroundColor))
                 
                 Divider()
-                
+
+                if let checker = updateChecker, let newVersion = checker.updateAvailable {
+                    Button {
+                        NSWorkspace.shared.open(checker.releaseURL)
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "arrow.down.circle.fill")
+                            Text("Update available — v\(newVersion)")
+                                .font(.caption.weight(.semibold))
+                            Spacer()
+                            Image(systemName: "arrow.up.right")
+                                .font(.caption2)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
+                        .background(Color.accentColor.opacity(0.15))
+                    }
+                    .buttonStyle(.plain)
+
+                    Divider()
+                }
+
                 if sessionManager.sessions.isEmpty {
                     VStack(spacing: 8) {
                         Image(systemName: "eyes")

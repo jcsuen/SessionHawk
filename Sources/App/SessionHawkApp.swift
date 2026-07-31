@@ -4,6 +4,7 @@ import SwiftUI
 struct SessionHawkApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @State private var sessionManager: SessionManager
+    @State private var updateChecker: UpdateChecker
     private let hookListener: HookListener
 
     init() {
@@ -13,11 +14,14 @@ struct SessionHawkApp: App {
         _sessionManager = State(initialValue: manager)
         hookListener = HookListener(sessionManager: manager)
         hookListener.start()
+        let checker = MainActor.assumeIsolated { UpdateChecker() }
+        _updateChecker = State(initialValue: checker)
+        MainActor.assumeIsolated { checker.start() }
     }
 
     var body: some Scene {
         MenuBarExtra {
-            MenuBarView(sessionManager: sessionManager)
+            MenuBarView(sessionManager: sessionManager, updateChecker: updateChecker)
         } label: {
             menuBarLabel
         }
