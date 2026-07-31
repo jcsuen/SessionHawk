@@ -128,6 +128,17 @@ public final class HookListener: Sendable {
                 let body = (try? encoder.encode(manager.sessions)).flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
                 self.sendResponse(connection: connection, statusCode: 200, body: body)
             }
+        } else if method == "POST" && path == "/v1/daily" {
+            guard let jsonData = bodyPart.data(using: .utf8),
+                  let stats = try? JSONDecoder().decode(DailyStats.self, from: jsonData) else {
+                sendResponse(connection: connection, statusCode: 400, body: "{\"error\":\"bad daily stats\"}")
+                return
+            }
+            let manager = sessionManager
+            Task { @MainActor in
+                manager.updateDaily(stats)
+            }
+            sendResponse(connection: connection, statusCode: 200, body: "{\"status\":\"ok\"}")
         } else if method == "POST" && path == "/v1/event" {
             guard let jsonData = bodyPart.data(using: .utf8) else {
                 sendResponse(connection: connection, statusCode: 400, body: "Invalid UTF-8 Body")

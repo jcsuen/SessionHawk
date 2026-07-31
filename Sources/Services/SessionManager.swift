@@ -1,10 +1,20 @@
 import Foundation
 import Observation
 
+public struct DailyStats: Codable, Sendable {
+    public let outputTokens: Int
+    public let turns: Int
+}
+
 @Observable
 @MainActor
 public final class SessionManager {
     public private(set) var sessions: [AgentSession] = []
+    public private(set) var dailyStats: DailyStats?
+
+    public func updateDaily(_ stats: DailyStats) {
+        dailyStats = stats
+    }
     
     public init() {
         // Start a periodic cleanup timer for dead/inactive PIDs

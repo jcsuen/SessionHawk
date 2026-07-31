@@ -27,6 +27,40 @@ detect_context_limit() {
 }
 CONTEXT_LIMIT=$(detect_context_limit)
 
+# Leaderboard (opt-in): create ~/.sessionhawk/leaderboard containing a nickname
+# to appear on https://paulobuilds.com/sessionhawk/leaderboard. Only the
+# nickname, daily output-token/turn tallies, and live agent count are sent,
+# keyed by a random install id. Delete the file to leave the board.
+STATE_DIR="$HOME/.sessionhawk"
+mkdir -p "$STATE_DIR"
+[ -s "$STATE_DIR/id" ] || uuidgen | tr '[:upper:]' '[:lower:]' > "$STATE_DIR/id" 2>/dev/null
+DEVICE_ID=$(cat "$STATE_DIR/id" 2>/dev/null)
+BOARD_NAME=""
+[ -s "$STATE_DIR/leaderboard" ] && BOARD_NAME=$(head -c 64 "$STATE_DIR/leaderboard" | tr -cd 'A-Za-z0-9_ .-' | cut -c1-24)
+
+# Today's totals from all Claude transcripts; feeds the app header and (if
+# opted in) the leaderboard. Heavier than a heartbeat, so throttled by caller.
+publish_daily() {
+    local today out_turns out turns
+    today=$(date +%Y-%m-%d)
+    out_turns=$(find "$HOME/.claude/projects" -name '*.jsonl' -mtime -2 -exec cat {} + 2>/dev/null \
+        | jq -Rrs --arg today "$today" '
+            [ split("\n")[] | fromjson? | select((.timestamp // "") | startswith($today)) | .message.usage // empty ]
+            | "\(map(.output_tokens // 0) | add // 0) \(length)"' 2>/dev/null)
+    out=${out_turns%% *}
+    turns=${out_turns##* }
+    [ -n "$out" ] && [ "$out" -ge 0 ] 2>/dev/null || return
+    curl -s -m 2 -X POST http://localhost:9422/v1/daily -H "Content-Type: application/json" \
+        -d "{\"outputTokens\": $out, \"turns\": $turns}" >/dev/null 2>&1
+    if [ -n "$BOARD_NAME" ] && [ -n "$DEVICE_ID" ]; then
+        curl -s -m 5 -X POST "https://paulobuilds.com/sessionhawk/leaderboard" \
+            -H "Content-Type: application/json" \
+            -d "{\"id\":\"$DEVICE_ID\",\"name\":\"$BOARD_NAME\",\"day\":\"$today\",\"out\":$out,\"turns\":$turns,\"agents\":$AGENT_COUNT}" \
+            >/dev/null 2>&1
+    fi
+    echo "daily: ${out} output tokens, ${turns} turns${BOARD_NAME:+ (→ leaderboard as $BOARD_NAME)}"
+}
+
 escape_json() {
     local value="$1"
     value="${value//\\/\\\\}"
@@ -113,12 +147,15 @@ report_pid() {
         \"workingDirectory\": \"$(escape_json "$cwd")\",
         \"commandLine\": \"$(escape_json "$cmd")\"$tokens_json$state_json
     }" >/dev/null 2>&1 && echo "heartbeat pid $pid ($provider${state:+, $state}) — $cwd ${usage:+[ctx ${usage%% *}/$CONTEXT_LIMIT]}"
+    AGENT_COUNT=$((AGENT_COUNT + 1))
 }
 
 scan() {
     # Snapshot of the states the app currently shows, "pid state" per line
     CURRENT_STATES=$(curl -s -m 2 "http://localhost:9422/v1/sessions" 2>/dev/null \
         | jq -r '.[] | "\(.pid) \(.state)"' 2>/dev/null)
+
+    AGENT_COUNT=0
 
     # ps comm matching instead of pgrep: some claude processes have an
     # accounting name pgrep -x misses (e.g. sessions launched via the
@@ -147,13 +184,20 @@ discover_by_cmd() {
     done
 }
 
-if [ "$1" = "--once" ]; then
+if [ "${1:-}" = "--once" ]; then
     scan
+    publish_daily
     exit 0
 fi
 
 echo "🦅 SessionHawk feeder started (every ${POLL_INTERVAL}s, Ctrl-C to stop)"
+TICK=0
 while true; do
     scan
+    # Daily totals are a full-transcript parse — refresh every 10th pass (~5 min)
+    if [ $((TICK % 10)) -eq 0 ]; then
+        publish_daily
+    fi
+    TICK=$((TICK + 1))
     sleep "$POLL_INTERVAL"
 done

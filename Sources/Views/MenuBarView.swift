@@ -32,6 +32,14 @@ public struct MenuBarView: View {
 
     private var size: WindowSize { WindowSize(rawValue: windowSize) ?? .medium }
 
+    static func compact(_ n: Int) -> String {
+        switch n {
+        case 1_000_000...: return String(format: "%.1fM", Double(n) / 1_000_000)
+        case 1_000...: return "\(n / 1_000)k"
+        default: return String(n)
+        }
+    }
+
     public init(sessionManager: SessionManager, updateChecker: UpdateChecker? = nil) {
         self.sessionManager = sessionManager
         self.updateChecker = updateChecker
@@ -52,12 +60,19 @@ public struct MenuBarView: View {
                 .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .leading)))
             } else {
                 HStack {
-                    Text("SessionHawk")
-                        .font(.headline)
-                        .fontWeight(.bold)
-                    
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("SessionHawk")
+                            .font(.headline)
+                            .fontWeight(.bold)
+                        if let daily = sessionManager.dailyStats {
+                            Text("Today: \(Self.compact(daily.outputTokens)) tokens · \(daily.turns) turns")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
                     Spacer()
-                    
+
                     Text("\(sessionManager.sessions.count) active session\(sessionManager.sessions.count == 1 ? "" : "s")")
                         .font(.caption)
                         .padding(.horizontal, 6)
@@ -151,6 +166,11 @@ public struct MenuBarView: View {
                             icon: "cup.and.saucer.fill", iconColor: .orange, label: "Coffee",
                             help: "Enjoying SessionHawk? Buy me a coffee",
                             url: "https://buymeacoffee.com/jcsuen"
+                        )
+                        FooterChip(
+                            icon: "trophy.fill", iconColor: .purple, label: "Board",
+                            help: "Daily leaderboard — who's flying the most agents today",
+                            url: "https://paulobuilds.com/sessionhawk/leaderboard"
                         )
                     }
 
