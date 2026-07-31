@@ -24,6 +24,18 @@ cp .build/release/SessionHawk "$APP/Contents/MacOS/SessionHawk"
 cp assets/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 cp assets/menubar-hawk.png "$APP/Contents/Resources/menubar-hawk.png"
 
+# Embed the helper scripts and launchd templates so an installed app is fully
+# self-contained — hooks and agents reference stable /Applications paths.
+mkdir -p "$APP/Contents/Resources/scripts" "$APP/Contents/Resources/launchd"
+cp scripts/sessionhawk-claude-hook.sh \
+   scripts/feed-live-sessions.sh \
+   scripts/install-hooks.sh \
+   scripts/uninstall.sh \
+   scripts/sessionhawk-hook.sh \
+   "$APP/Contents/Resources/scripts/"
+cp launchd/*.plist "$APP/Contents/Resources/launchd/"
+chmod +x "$APP/Contents/Resources/scripts/"*.sh
+
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

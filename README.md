@@ -54,43 +54,46 @@ Running four Claude Code sessions, a Gemini CLI, and a Codex agent across a doze
 
 ## Install
 
+**One command** (Apple Silicon, macOS 14+):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jcsuen/SessionHawk/main/install.sh | bash
+```
+
+That's the whole setup. It downloads the pre-built app from [Releases](https://github.com/jcsuen/SessionHawk/releases) into `/Applications`, **wires the Claude Code hooks automatically** (merged into `~/.claude/settings.json` with a timestamped backup — nothing of yours is overwritten), and sets up start-at-login for the app and the session feeder. Requires `jq` (installed via Homebrew if missing).
+
+Uninstall just as easily:
+
+```bash
+/Applications/SessionHawk.app/Contents/Resources/scripts/uninstall.sh
+```
+
+<details>
+<summary><b>Build from source / manual setup</b></summary>
+
 ```bash
 git clone https://github.com/jcsuen/SessionHawk.git
 cd SessionHawk
-./scripts/make-app-bundle.sh     # builds and installs /Applications/SessionHawk.app
-open /Applications/SessionHawk.app
+./install.sh        # detects the clone and builds instead of downloading
 ```
 
-Wire up the Claude Code hooks (precise states + notifications) by adding to `~/.claude/settings.json`:
+Prefer to wire things yourself? `./scripts/make-app-bundle.sh` builds and installs the app only; `./scripts/install-hooks.sh` merges just the hooks; the hooks JSON it produces adds `sessionhawk-claude-hook.sh` to `UserPromptSubmit`/`PostToolUse` (→ working), `Stop`/`Notification` (→ waitingForInput), and `SessionEnd` (→ idle), all async. `./scripts/feed-live-sessions.sh` runs the feeder in the foreground; `launchd/` has start-at-login templates.
 
-```jsonc
-{
-  "hooks": {
-    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "/path/to/SessionHawk/scripts/sessionhawk-claude-hook.sh working", "timeout": 10, "async": true }] }],
-    "Stop":             [{ "hooks": [{ "type": "command", "command": "/path/to/SessionHawk/scripts/sessionhawk-claude-hook.sh waitingForInput", "timeout": 10, "async": true }] }],
-    "Notification":     [{ "hooks": [{ "type": "command", "command": "/path/to/SessionHawk/scripts/sessionhawk-claude-hook.sh waitingForInput", "timeout": 10, "async": true }] }],
-    "SessionEnd":       [{ "hooks": [{ "type": "command", "command": "/path/to/SessionHawk/scripts/sessionhawk-claude-hook.sh idle", "timeout": 10, "async": true }] }],
-    "PostToolUse":      [{ "matcher": "*", "hooks": [{ "type": "command", "command": "/path/to/SessionHawk/scripts/sessionhawk-claude-hook.sh working", "timeout": 10, "async": true }] }]
-  }
-}
-```
+</details>
 
-Start the feeder (discovery + context tracking):
+> Already-running Claude Code sessions load hooks at startup — open `/hooks` once in each (or restart them) to activate. New sessions work immediately.
 
-```bash
-./scripts/feed-live-sessions.sh          # foreground
-```
+## Provider support
 
-### Start everything at login
+| Provider | Detected how | Presence | State (Working / Input Needed) | Context % | Tab focus |
+|---|---|:-:|:-:|:-:|:-:|
+| **Claude Code** | hooks + `claude` process scan | ✅ | ✅ instant (hooks) + self-healing (transcript activity) | ✅ from transcripts, 200k/1M auto-detected | ✅ |
+| **Gemini CLI** | command-line scan (`node …/bin/gemini`) | ✅ | — | — | ✅ |
+| **Codex CLI** | command-line scan (`…/bin/codex`) | ✅ | — | — | ✅ |
+| **Cursor agent** | command-line scan (`…/bin/cursor-agent`) | ✅ | — | — | ✅ |
+| **Anything else** | `POST /v1/event` | ✅ | ✅ if you report it | ✅ if you report it | ✅ |
 
-```bash
-cp launchd/com.sessionhawk.app.plist launchd/com.sessionhawk.feeder.plist ~/Library/LaunchAgents/
-# edit the feeder plist so the script path matches your clone location, then:
-launchctl load ~/Library/LaunchAgents/com.sessionhawk.app.plist
-launchctl load ~/Library/LaunchAgents/com.sessionhawk.feeder.plist
-```
-
-Requires `jq` (`brew install jq`) for transcript parsing.
+Claude Code gets the deep integration because it exposes lifecycle hooks and on-disk transcripts. The other CLIs are auto-discovered by the feeder scanning running processes — you see *that* they're running, where, and can jump to their terminal tab; state/context columns light up for any tool that POSTs to the local API (see below). Gemini/Codex state adapters are on the roadmap — PRs welcome.
 
 ## HTTP API
 

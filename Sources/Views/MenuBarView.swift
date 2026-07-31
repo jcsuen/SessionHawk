@@ -114,6 +114,26 @@ public struct MenuBarView: View {
 
                     Spacer()
 
+                    Button {
+                        NSWorkspace.shared.open(URL(string: "https://buymeacoffee.com/jcsuen")!)
+                    } label: {
+                        Image(systemName: "cup.and.saucer.fill")
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Enjoying SessionHawk? Buy me a coffee ☕")
+
+                    Button {
+                        NSWorkspace.shared.open(URL(string: "https://github.com/jcsuen/SessionHawk")!)
+                    } label: {
+                        Image(systemName: "star")
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("SessionHawk on GitHub — v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev")")
+
+                    Spacer()
+
                     Picker("", selection: $windowSize) {
                         ForEach(WindowSize.allCases, id: \.rawValue) { s in
                             Text(s.rawValue).tag(s.rawValue)
