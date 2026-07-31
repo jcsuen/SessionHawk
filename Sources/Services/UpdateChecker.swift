@@ -13,7 +13,12 @@ public final class UpdateChecker {
     public static let currentVersion =
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0"
 
-    public init() {}
+    public init() {
+        // Debug/preview: SESSIONHAWK_FAKE_UPDATE=0.9.9 forces the banner
+        if let fake = ProcessInfo.processInfo.environment["SESSIONHAWK_FAKE_UPDATE"] {
+            updateAvailable = fake
+        }
+    }
 
     public func start() {
         check()

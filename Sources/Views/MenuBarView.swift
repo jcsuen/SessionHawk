@@ -127,51 +127,85 @@ public struct MenuBarView: View {
                 Divider()
                 
                 HStack {
+                    // Left: quiet Quit
                     Button(action: {
                         NSApp.terminate(nil)
                     }) {
                         Label("Quit", systemImage: "power")
+                            .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
+                    .help("Quit SessionHawk")
 
                     Spacer()
 
-                    Button {
-                        NSWorkspace.shared.open(URL(string: "https://buymeacoffee.com/jcsuen")!)
-                    } label: {
-                        Image(systemName: "cup.and.saucer.fill")
-                            .foregroundStyle(.secondary)
+                    // Center: external links as small capsule chips
+                    HStack(spacing: 8) {
+                        FooterChip(
+                            icon: "star.fill", iconColor: .yellow, label: "Star",
+                            help: "Star SessionHawk on GitHub — v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev")",
+                            url: "https://github.com/jcsuen/SessionHawk"
+                        )
+                        FooterChip(
+                            icon: "cup.and.saucer.fill", iconColor: .orange, label: "Coffee",
+                            help: "Enjoying SessionHawk? Buy me a coffee",
+                            url: "https://buymeacoffee.com/jcsuen"
+                        )
                     }
-                    .buttonStyle(.plain)
-                    .help("Enjoying SessionHawk? Buy me a coffee ☕")
-
-                    Button {
-                        NSWorkspace.shared.open(URL(string: "https://github.com/jcsuen/SessionHawk")!)
-                    } label: {
-                        Image(systemName: "star")
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .help("SessionHawk on GitHub — v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev")")
 
                     Spacer()
 
+                    // Right: window size selector
                     Picker("", selection: $windowSize) {
                         ForEach(WindowSize.allCases, id: \.rawValue) { s in
                             Text(s.rawValue).tag(s.rawValue)
                         }
                     }
                     .pickerStyle(.segmented)
-                    .frame(width: 100)
+                    .frame(width: 90)
                     .help("Window size")
                 }
                 .padding(.vertical, 8)
-                .padding(.horizontal)
+                .padding(.horizontal, 10)
                 .background(Color(NSColor.windowBackgroundColor))
             }
         }
         .frame(width: size.width)
         .animation(.spring(response: 0.3, dampingFraction: 0.8), value: selectedSession?.id)
+    }
+}
+
+/// Small capsule chip for external links in the footer, with a hover tint.
+struct FooterChip: View {
+    let icon: String
+    let iconColor: Color
+    let label: String
+    let help: String
+    let url: String
+    @State private var hovered = false
+
+    var body: some View {
+        Button {
+            if let target = URL(string: url) {
+                NSWorkspace.shared.open(target)
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(.caption2)
+                    .foregroundStyle(iconColor)
+                Text(label)
+                    .font(.caption2)
+                    .foregroundStyle(.primary)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Color.primary.opacity(hovered ? 0.12 : 0.06))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovered = $0 }
+        .help(help)
     }
 }
