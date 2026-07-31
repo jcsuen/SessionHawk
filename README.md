@@ -13,7 +13,7 @@
   <a href="https://buymeacoffee.com/jcsuen"><img src="https://img.shields.io/badge/☕-Buy%20me%20a%20coffee-ffdd00?style=flat-square" alt="Buy Me a Coffee"></a>
   <img src="https://img.shields.io/badge/macOS-14+-black?style=flat-square&logo=apple" alt="macOS 14+">
   <img src="https://img.shields.io/badge/Swift-5.9-F05138?style=flat-square&logo=swift&logoColor=white" alt="Swift 5.9">
-  <img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="MIT License">
+  <img src="https://img.shields.io/badge/license-PolyForm%20Noncommercial-blue?style=flat-square" alt="PolyForm Noncommercial License">
 </p>
 
 <p align="center">
@@ -109,4 +109,4 @@ If SessionHawk saves you from one more "oh no, it's been waiting for me for 20 m
 
 ## License
 
-[MIT](LICENSE)
+[PolyForm Noncommercial 1.0.0](LICENSE) — free to use, modify, and share for any noncommercial purpose. Commercial use requires a separate license; get in touch.
