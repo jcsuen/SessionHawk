@@ -57,7 +57,7 @@ Running four Claude Code sessions, a Gemini CLI, and a Codex agent across a doze
 
 ## Install
 
-**One command** (Apple Silicon, macOS 14+):
+**One command** (Apple Silicon & Intel, macOS 14+):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/jcsuen/SessionHawk/main/install.sh | bash

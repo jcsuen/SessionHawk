@@ -13,14 +13,24 @@ cd "$(dirname "$0")/.."
 OUT_DIR="${1:-dist}"
 APP="$OUT_DIR/SessionHawk.app"
 
-echo "▸ Building release binary..."
-swift build -c release
+# Universal binary (arm64 + x86_64) so one release zip serves both Apple
+# Silicon and Intel Macs. Built as two per-triple slices + lipo because
+# `swift build --arch --arch` requires full Xcode (xcbuild), not just CLT.
+echo "▸ Building arm64 slice..."
+swift build -c release --triple arm64-apple-macosx14.0
+echo "▸ Building x86_64 slice..."
+swift build -c release --triple x86_64-apple-macosx14.0
+BINARY=".build/SessionHawk-universal"
+lipo -create -output "$BINARY" \
+    .build/arm64-apple-macosx/release/SessionHawk \
+    .build/x86_64-apple-macosx/release/SessionHawk
+echo "▸ Universal binary: $(lipo -archs "$BINARY")"
 
 echo "▸ Assembling $APP ..."
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
-cp .build/release/SessionHawk "$APP/Contents/MacOS/SessionHawk"
+cp "$BINARY" "$APP/Contents/MacOS/SessionHawk"
 cp assets/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 cp assets/menubar-hawk.png "$APP/Contents/Resources/menubar-hawk.png"
 

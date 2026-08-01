@@ -15,9 +15,6 @@ RES="$APP/Contents/Resources"
 echo "🦅 SessionHawk installer"
 
 [ "$(uname -s)" = "Darwin" ] || { echo "❌ macOS only"; exit 1; }
-if [ "$(uname -m)" != "arm64" ]; then
-    echo "⚠️  Pre-built release is Apple Silicon only — will try building from source."
-fi
 
 if ! command -v jq >/dev/null 2>&1; then
     if command -v brew >/dev/null 2>&1; then
