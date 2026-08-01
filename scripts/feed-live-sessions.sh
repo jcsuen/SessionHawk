@@ -5,7 +5,9 @@
 #
 # Heartbeats carry NO state — precise state (working / waitingForInput) comes
 # from the Claude Code hooks (sessionhawk-claude-hook.sh). The heartbeat's job
-# is discovery, keep-alive, and context-usage refresh for claude sessions.
+# is discovery, keep-alive, and context-usage refresh. Claude, Gemini, and
+# Codex sessions get context tokens + mtime-reconciled state from their
+# transcripts; cursor-agent is presence-only.
 #
 # Usage:
 #   ./scripts/feed-live-sessions.sh          # run in foreground
@@ -26,6 +28,9 @@ detect_context_limit() {
     fi
 }
 CONTEXT_LIMIT=$(detect_context_limit)
+
+# Gemini CLI models are 1M-context; override with SH_GEMINI_CONTEXT_LIMIT.
+GEMINI_CONTEXT_LIMIT=${SH_GEMINI_CONTEXT_LIMIT:-1000000}
 
 # Leaderboard (opt-in): create ~/.sessionhawk/leaderboard containing a nickname
 # to appear on https://paulobuilds.com/sessionhawk/leaderboard. Only the
@@ -87,6 +92,53 @@ claude_tokens() {
         2>/dev/null | tail -n 1
 }
 
+# Newest Gemini CLI chat transcript for a working directory. The project dir
+# under ~/.gemini/tmp/ is sha256(cwd) on current Gemini versions, or the
+# lowercased basename of the cwd on older ones — try both.
+gemini_transcript() {
+    local cwd="$1" dir
+    for dir in "$(printf '%s' "$cwd" | shasum -a 256 | cut -d' ' -f1)" \
+               "$(basename "$cwd" | tr '[:upper:]' '[:lower:]')"; do
+        if [ -d "$HOME/.gemini/tmp/$dir/chats" ]; then
+            ls -t "$HOME/.gemini/tmp/$dir/chats"/*.jsonl 2>/dev/null | head -n 1
+            return
+        fi
+    done
+}
+
+# Last per-turn token record in a Gemini chat: "tokens":{input,output,...,total}.
+# total = context used on the last turn (input already includes cached).
+gemini_tokens() {
+    local transcript="$1"
+    tail -n 200 "$transcript" 2>/dev/null | jq -Rr '
+        fromjson? | .tokens? // empty | select(.total != null)
+        | "\(.total) \(.output // 0)"' 2>/dev/null | tail -n 1
+}
+
+# Newest Codex rollout whose session_meta cwd matches; only files touched in
+# the last 2 days are considered (first line holds the cwd).
+codex_transcript() {
+    local cwd="$1" f meta_cwd
+    for f in $(find "$HOME/.codex/sessions" -name 'rollout-*.jsonl' -mtime -2 2>/dev/null \
+               | xargs ls -t 2>/dev/null); do
+        meta_cwd=$(head -n 1 "$f" 2>/dev/null | jq -r '.payload.cwd // empty' 2>/dev/null)
+        if [ "$meta_cwd" = "$cwd" ]; then
+            echo "$f"
+            return
+        fi
+    done
+}
+
+# Last token_count event in a Codex rollout: "used output window".
+# last_token_usage.total_tokens = context used; model_context_window = limit.
+codex_tokens() {
+    local transcript="$1"
+    tail -n 400 "$transcript" 2>/dev/null | jq -Rr '
+        fromjson? | select(.payload.type? == "token_count") | .payload.info // empty
+        | "\(.last_token_usage.total_tokens // 0) \(.last_token_usage.output_tokens // 0) \(.model_context_window // 0)"' \
+        2>/dev/null | tail -n 1
+}
+
 # State from transcript activity, aware of the state the app currently shows
 # (fetched from GET /v1/sessions each scan). Rules:
 #   fresh mtime (<20s)                  -> working (streaming)
@@ -95,7 +147,7 @@ claude_tokens() {
 #   otherwise                           -> no state; preserves hook-set states.
 # Only hooks may claim waitingForInput: a quiet transcript can also mean the
 # session waits on background monitors/tasks and needs nothing from the user.
-claude_state() {
+transcript_state() {
     local transcript="$1" current="$2"
     local mtime now age
     mtime=$(stat -f %m "$transcript" 2>/dev/null) || return
@@ -121,20 +173,36 @@ report_pid() {
     local cmd
     cmd=$(ps -o command= -p "$pid" 2>/dev/null | head -c 200)
 
-    local tokens_json="" state_json="" usage="" state=""
-    if [ "$provider" = "claude" ]; then
-        local transcript
-        transcript=$(claude_transcript "$cwd")
-        if [ -n "$transcript" ]; then
-            usage=$(claude_tokens "$transcript")
-            if [ -n "$usage" ]; then
-                tokens_json=", \"inputTokens\": ${usage%% *}, \"outputTokens\": ${usage##* }, \"totalLimit\": $CONTEXT_LIMIT"
+    local tokens_json="" state_json="" usage="" state="" transcript="" limit=""
+    case "$provider" in
+        claude)
+            transcript=$(claude_transcript "$cwd")
+            limit=$CONTEXT_LIMIT
+            [ -n "$transcript" ] && usage=$(claude_tokens "$transcript")
+            ;;
+        gemini)
+            transcript=$(gemini_transcript "$cwd")
+            limit=$GEMINI_CONTEXT_LIMIT
+            [ -n "$transcript" ] && usage=$(gemini_tokens "$transcript")
+            ;;
+        codex)
+            transcript=$(codex_transcript "$cwd")
+            if [ -n "$transcript" ]; then
+                usage=$(codex_tokens "$transcript")
+                limit=${usage##* }          # third field: model_context_window
+                usage=${usage% *}           # keep "used output"
+                [ "$limit" -gt 0 ] 2>/dev/null || { usage=""; limit=""; }
             fi
-            local current
-            current=$(printf '%s\n' "$CURRENT_STATES" | awk -v p="$pid" '$1 == p {print $2}')
-            state=$(claude_state "$transcript" "$current")
-            [ -n "$state" ] && state_json=", \"state\": \"$state\""
-        fi
+            ;;
+    esac
+    if [ -n "$usage" ] && [ -n "$limit" ]; then
+        tokens_json=", \"inputTokens\": ${usage%% *}, \"outputTokens\": ${usage##* }, \"totalLimit\": $limit"
+    fi
+    if [ -n "$transcript" ]; then
+        local current
+        current=$(printf '%s\n' "$CURRENT_STATES" | awk -v p="$pid" '$1 == p {print $2}')
+        state=$(transcript_state "$transcript" "$current")
+        [ -n "$state" ] && state_json=", \"state\": \"$state\""
     fi
 
     local title
@@ -146,7 +214,7 @@ report_pid() {
         \"terminalTitle\": \"$(escape_json "$title")\",
         \"workingDirectory\": \"$(escape_json "$cwd")\",
         \"commandLine\": \"$(escape_json "$cmd")\"$tokens_json$state_json
-    }" >/dev/null 2>&1 && echo "heartbeat pid $pid ($provider${state:+, $state}) — $cwd ${usage:+[ctx ${usage%% *}/$CONTEXT_LIMIT]}"
+    }" >/dev/null 2>&1 && echo "heartbeat pid $pid ($provider${state:+, $state}) — $cwd ${usage:+[ctx ${usage%% *}/$limit]}"
     AGENT_COUNT=$((AGENT_COUNT + 1))
 }
 
