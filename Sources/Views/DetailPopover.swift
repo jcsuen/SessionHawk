@@ -42,6 +42,11 @@ public struct DetailPopover: View {
                 }
                 
                 DetailRow(label: "Last Active", value: formattedDate(session.lastActive))
+                DetailRow(label: "Watching Since", value: formattedDate(session.firstSeen))
+
+                if session.sessionOutputTokens != nil || session.sessionTurns != nil {
+                    DetailRow(label: "This Session", value: sessionStats)
+                }
             }
             
             if let tokenUsage = session.tokenUsage {
@@ -93,6 +98,17 @@ public struct DetailPopover: View {
         .frame(maxWidth: .infinity)
     }
     
+    private var sessionStats: String {
+        var parts: [String] = []
+        if let out = session.sessionOutputTokens {
+            parts.append("\(MenuBarView.compact(out)) output tokens")
+        }
+        if let turns = session.sessionTurns {
+            parts.append("\(turns) turns")
+        }
+        return parts.joined(separator: " · ")
+    }
+
     private func formattedDate(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.timeStyle = .medium

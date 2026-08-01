@@ -64,6 +64,10 @@ public struct AgentSession: Identifiable, Codable, Sendable {
     // ms-epoch of the last applied timestamped state change (hook events);
     // used to drop out-of-order async hook deliveries
     public var stateTimestamp: Double?
+    // Cumulative transcript totals for this session (from feeder heartbeats)
+    public var sessionOutputTokens: Int?
+    public var sessionTurns: Int?
+    public var firstSeen: Date
 
     public init(id: UUID = UUID(),
                 pid: Int32,
@@ -83,5 +87,6 @@ public struct AgentSession: Identifiable, Codable, Sendable {
         self.lastActive = lastActive
         self.workingDirectory = workingDirectory
         self.commandLine = commandLine
+        self.firstSeen = lastActive
     }
 }

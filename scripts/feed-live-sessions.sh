@@ -139,6 +139,26 @@ codex_tokens() {
         2>/dev/null | tail -n 1
 }
 
+# Cumulative session totals ("output turns") for the mini-stats row in the
+# app's detail popover. Whole-file parses, but transcripts are a few MB max.
+claude_session_totals() {
+    jq -Rrs '[ split("\n")[] | fromjson? | select(.isSidechain != true)
+               | .message.usage // empty | select(.input_tokens != null) ]
+             | "\(map(.output_tokens // 0) | add // 0) \(length)"' "$1" 2>/dev/null
+}
+
+gemini_session_totals() {
+    jq -Rrs '[ split("\n")[] | fromjson? | .tokens? // empty | select(.total != null) ]
+             | "\(map(.output // 0) | add // 0) \(length)"' "$1" 2>/dev/null
+}
+
+# Codex reports cumulative output itself (total_token_usage in the last
+# token_count event); turns = number of token_count events.
+codex_session_totals() {
+    jq -Rrs '[ split("\n")[] | fromjson? | select(.payload.type? == "token_count") | .payload.info ]
+             | "\(last.total_token_usage.output_tokens // 0) \(length)"' "$1" 2>/dev/null
+}
+
 # State from transcript activity, aware of the state the app currently shows
 # (fetched from GET /v1/sessions each scan). Rules:
 #   fresh mtime (<20s)                  -> working (streaming)
@@ -197,6 +217,11 @@ report_pid() {
     esac
     if [ -n "$usage" ] && [ -n "$limit" ]; then
         tokens_json=", \"inputTokens\": ${usage%% *}, \"outputTokens\": ${usage##* }, \"totalLimit\": $limit"
+        local totals
+        totals=$("${provider}_session_totals" "$transcript")
+        if [ -n "$totals" ]; then
+            tokens_json="$tokens_json, \"sessionOutputTokens\": ${totals%% *}, \"sessionTurns\": ${totals##* }"
+        fi
     fi
     if [ -n "$transcript" ]; then
         local current

@@ -73,6 +73,12 @@ public final class SessionManager {
             if let cmd = payload.commandLine {
                 sessions[index].commandLine = cmd
             }
+            if let out = payload.sessionOutputTokens {
+                sessions[index].sessionOutputTokens = out
+            }
+            if let turns = payload.sessionTurns {
+                sessions[index].sessionTurns = turns
+            }
             sessions[index].lastActive = now
             
             // Send notification only if transition is to waitingForInput
@@ -94,6 +100,8 @@ public final class SessionManager {
             if payload.state != nil {
                 newSession.stateTimestamp = payload.timestamp
             }
+            newSession.sessionOutputTokens = payload.sessionOutputTokens
+            newSession.sessionTurns = payload.sessionTurns
             sessions.append(newSession)
             
             if payload.state == .waitingForInput {

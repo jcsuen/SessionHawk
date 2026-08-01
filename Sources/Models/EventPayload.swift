@@ -12,6 +12,9 @@ public struct EventPayload: Codable, Sendable {
     public let inputTokens: Int?
     public let outputTokens: Int?
     public let totalLimit: Int?
+    // Cumulative session totals parsed from the transcript by the feeder
+    public let sessionOutputTokens: Int?
+    public let sessionTurns: Int?
     // Event time in ms since epoch. Hooks run async and can deliver out of
     // order at turn boundaries; stale state changes are discarded by comparing
     // this against the session's last applied state timestamp.
@@ -26,6 +29,8 @@ public struct EventPayload: Codable, Sendable {
                 inputTokens: Int? = nil,
                 outputTokens: Int? = nil,
                 totalLimit: Int? = nil,
+                sessionOutputTokens: Int? = nil,
+                sessionTurns: Int? = nil,
                 timestamp: Double? = nil) {
         self.pid = pid
         self.provider = provider
@@ -36,6 +41,8 @@ public struct EventPayload: Codable, Sendable {
         self.inputTokens = inputTokens
         self.outputTokens = outputTokens
         self.totalLimit = totalLimit
+        self.sessionOutputTokens = sessionOutputTokens
+        self.sessionTurns = sessionTurns
         self.timestamp = timestamp
     }
 }
