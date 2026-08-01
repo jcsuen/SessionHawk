@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build (debug)
+        run: swift build
+
+      - name: Run tests
+        run: swift run SessionHawkTests
+
+      - name: Build release slices (universal)
+        run: |
+          swift build -c release --triple arm64-apple-macosx14.0
+          swift build -c release --triple x86_64-apple-macosx14.0
+          lipo -create -output /tmp/SessionHawk-universal \
+            .build/arm64-apple-macosx/release/SessionHawk \
+            .build/x86_64-apple-macosx/release/SessionHawk
+          lipo -archs /tmp/SessionHawk-universal
+
+      - name: Shell script syntax
+        run: for f in scripts/*.sh install.sh; do bash -n "$f"; done

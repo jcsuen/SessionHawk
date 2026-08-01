@@ -127,6 +127,9 @@ public final class NotificationManager: NSObject, UNUserNotificationCenterDelega
     }
 
     public func sendAlert(for session: AgentSession) {
+        // Kill-switch for test runs and headless environments (getenv, not
+        // ProcessInfo: tests set it after launch via setenv).
+        guard getenv("SESSIONHAWK_NO_NOTIFY") == nil else { return }
         guard hasBundle else {
             sendFallbackAlert(for: session)
             return

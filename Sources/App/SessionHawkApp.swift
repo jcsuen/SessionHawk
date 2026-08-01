@@ -1,4 +1,5 @@
 import SwiftUI
+import SessionHawkCore
 
 @main
 struct SessionHawkApp: App {
