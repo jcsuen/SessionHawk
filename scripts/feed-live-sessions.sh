@@ -66,6 +66,41 @@ publish_daily() {
     echo "daily: ${out} output tokens, ${turns} turns${BOARD_NAME:+ (→ leaderboard as $BOARD_NAME)}"
 }
 
+# Today's work time from transcript activity, gap-merged (pauses ≤15 min count
+# as continuous). wallMins = union across all projects ("how long did I
+# work"); agentMins = sum of per-project unions ("how long did agents work",
+# counts parallelism). Published to paulobuilds for the personal dashboard.
+active_minutes() {
+    # args: files...; prints gap-merged active minutes of today's entries
+    cat "$@" 2>/dev/null | jq -Rr --arg t "$(date +%Y-%m-%d)" \
+        'fromjson? | .timestamp // empty | select(startswith($t))' 2>/dev/null \
+    | sort -u | jq -Rrs '
+        split("\n") | map(select(length > 0) | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601) | sort
+        | if length == 0 then 0
+          elif length == 1 then 1
+          else (reduce .[1:][] as $t ({last: .[0], sum: 60};
+                    if ($t - .last) <= 900 then {last: $t, sum: (.sum + $t - .last)}
+                    else {last: $t, sum: (.sum + 60)} end)
+                | .sum / 60 | floor)
+          end' 2>/dev/null
+}
+
+publish_workday() {
+    local wall_mins agent_mins d mins
+    wall_mins=$(active_minutes "$HOME/.claude/projects"/*/*.jsonl)
+    [ -n "$wall_mins" ] && [ "$wall_mins" -gt 0 ] 2>/dev/null || return
+    agent_mins=0
+    for d in "$HOME/.claude/projects"/*/; do
+        mins=$(active_minutes "$d"*.jsonl)
+        [ -n "$mins" ] && [ "$mins" -gt 0 ] 2>/dev/null && agent_mins=$((agent_mins + mins))
+    done
+    curl -s -m 5 -X POST "https://paulobuilds.com/sessionhawk/workday" \
+        -H "Content-Type: application/json" \
+        -d "{\"id\":\"$DEVICE_ID\",\"day\":\"$(date +%Y-%m-%d)\",\"wallMins\":$wall_mins,\"agentMins\":$agent_mins}" \
+        >/dev/null 2>&1
+    echo "workday: ${wall_mins}min wall, ${agent_mins}min agent"
+}
+
 # Account usage limits → POST /v1/limits, one payload per provider.
 # Claude: same OAuth usage endpoint the CLI's /usage screen calls, token from
 # the Keychain. Codex: rollouts self-report rate_limits in token_count events.
@@ -336,6 +371,7 @@ if [ "${1:-}" = "--once" ]; then
     scan
     publish_daily
     publish_limits
+    publish_workday
     exit 0
 fi
 
@@ -347,6 +383,7 @@ while true; do
     if [ $((TICK % 10)) -eq 0 ]; then
         publish_daily
         publish_limits
+        publish_workday
     fi
     TICK=$((TICK + 1))
     sleep "$POLL_INTERVAL"
