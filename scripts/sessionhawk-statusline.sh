@@ -96,26 +96,68 @@ until_epoch() {
     fi
 }
 
-line="🦅 $model"
-[ -n "$dir" ] && line="$line \033[2m·\033[0m $(basename "$dir")"
-[ -n "$ctx" ] && line="$line \033[2m·\033[0m ctx $(pct_colored "$ctx")"
+# 5-cell usage bar: ▮▮▯▯▯
+bar() {
+    local p=${1%.*} filled out="" i
+    filled=$(( (p + 10) / 20 ))
+    [ "$filled" -gt 5 ] && filled=5
+    for ((i = 0; i < 5; i++)); do
+        if [ "$i" -lt "$filled" ]; then out+="▮"; else out+="▯"; fi
+    done
+    echo "$out"
+}
 
+# Gather values, then assemble per style
+s_pct="" s_rst="" wk_pct="" scoped_pct=""
 if [ -f "$CACHE" ]; then
     session=$(jq -r '[.limits[] | select(.kind == "session")][0] // empty | "\(.percent) \(.reset)"' "$CACHE" 2>/dev/null)
     weekly=$(jq -r '[.limits[] | select(.kind == "weekly_all")][0] // empty | "\(.percent) \(.reset)"' "$CACHE" 2>/dev/null)
     scoped=$(jq -r '[.limits[] | select(.kind == "weekly_scoped")][0].percent // empty' "$CACHE" 2>/dev/null)
     if [ -n "$session" ]; then
-        rst=$(until_epoch "${session##* }")
-        line="$line \033[2m·\033[0m 5h $(pct_colored "${session%% *}")${rst:+ \033[2m(↻$rst)\033[0m}"
+        s_pct=${session%% *}
+        s_rst=$(until_epoch "${session##* }")
     fi
-    if [ -n "$weekly" ]; then
-        wk_pct=${weekly%% *}
-        line="$line \033[2m·\033[0m wk $(pct_colored "$wk_pct")"
-        # Model-scoped weekly limit, shown when it's the tighter constraint
-        if [ -n "$scoped" ] && [ "${scoped%.*}" -gt "${wk_pct%.*}" ] 2>/dev/null; then
-            line="$line \033[2m(model $(pct_colored "$scoped"))\033[0m"
-        fi
+    [ -n "$weekly" ] && wk_pct=${weekly%% *}
+    # Model-scoped weekly limit matters only when it's the tighter constraint
+    if [ -n "$scoped" ] && [ -n "$wk_pct" ] && [ "${scoped%.*}" -gt "${wk_pct%.*}" ] 2>/dev/null; then
+        scoped_pct=$scoped
     fi
 fi
+
+# Style: words (default) | compact | bars | icons — switch live with e.g.
+#   echo bars > ~/.sessionhawk/statusline-style
+STYLE=$(tr -d '[:space:]' < "$HOME/.sessionhawk/statusline-style" 2>/dev/null)
+[ -n "$STYLE" ] || STYLE=words
+
+sep=" \033[2m·\033[0m "
+line="🦅 $model"
+[ -n "$dir" ] && line="$line$sep$(basename "$dir")"
+
+case "$STYLE" in
+    words)
+        [ -n "$ctx" ]    && line="$line${sep}context $(pct_colored "$ctx")"
+        [ -n "$s_pct" ]  && line="$line${sep}5-hour $(pct_colored "$s_pct")${s_rst:+ \033[2m(resets $s_rst)\033[0m}"
+        [ -n "$wk_pct" ] && line="$line${sep}week $(pct_colored "$wk_pct")"
+        [ -n "$scoped_pct" ] && line="$line \033[2m(model week $(pct_colored "$scoped_pct"))\033[0m"
+        ;;
+    bars)
+        [ -n "$ctx" ]    && line="$line${sep}ctx $(bar "$ctx") $(pct_colored "$ctx")"
+        [ -n "$s_pct" ]  && line="$line${sep}5h $(bar "$s_pct") $(pct_colored "$s_pct")${s_rst:+ \033[2m↻$s_rst\033[0m}"
+        [ -n "$wk_pct" ] && line="$line${sep}wk $(bar "$wk_pct") $(pct_colored "$wk_pct")"
+        [ -n "$scoped_pct" ] && line="$line \033[2m(model $(pct_colored "$scoped_pct"))\033[0m"
+        ;;
+    icons)
+        [ -n "$ctx" ]    && line="$line${sep}🧠 $(pct_colored "$ctx")"
+        [ -n "$s_pct" ]  && line="$line${sep}⏳ $(pct_colored "$s_pct")${s_rst:+ \033[2m↻$s_rst\033[0m}"
+        [ -n "$wk_pct" ] && line="$line${sep}📅 $(pct_colored "$wk_pct")"
+        [ -n "$scoped_pct" ] && line="$line \033[2m(model $(pct_colored "$scoped_pct"))\033[0m"
+        ;;
+    *)  # compact
+        [ -n "$ctx" ]    && line="$line${sep}ctx $(pct_colored "$ctx")"
+        [ -n "$s_pct" ]  && line="$line${sep}5h $(pct_colored "$s_pct")${s_rst:+ \033[2m(↻$s_rst)\033[0m}"
+        [ -n "$wk_pct" ] && line="$line${sep}wk $(pct_colored "$wk_pct")"
+        [ -n "$scoped_pct" ] && line="$line \033[2m(model $(pct_colored "$scoped_pct"))\033[0m"
+        ;;
+esac
 
 printf '%b\n' "$line"
