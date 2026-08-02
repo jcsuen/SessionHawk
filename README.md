@@ -34,6 +34,7 @@ Running four Claude Code sessions, a Gemini CLI, and a Codex agent across a doze
 - **🪶 Native and lightweight** — pure SwiftUI + Network framework. No Electron, no dependencies, ~500 KB binary.
 - **⬆️ Update notice** — the app checks daily for new releases and shows a one-click update banner.
 - **📈 Daily token counter** — "Today: 1.2M tokens · 840 turns" right in the header, parsed from your local transcripts.
+- **⏳ Usage-limit gauges** — your real Claude 5-hour/weekly utilization (and Codex rate limits) in the header, from the same API the CLI's `/usage` screen uses. Want them in your terminal too? Grab the companion [claude-limits-statusline](https://github.com/jcsuen/claude-limits-statusline).
 - **🏆 Daily leaderboard (opt-in)** — put a nickname in `~/.sessionhawk/leaderboard` and compete on [who's flying the most agents today](https://paulobuilds.com/sessionhawk/leaderboard). Nickname and tallies only.
 
 ## How it works

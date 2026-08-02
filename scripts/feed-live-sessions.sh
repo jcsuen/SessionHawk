@@ -67,12 +67,29 @@ publish_daily() {
 }
 
 # Account usage limits → POST /v1/limits, one payload per provider.
-# Claude: the statusline script maintains ~/.sessionhawk/limits.json from the
-# OAuth usage endpoint — refresh it here too so the app works without the
-# statusline. Codex: rollouts self-report rate_limits in token_count events.
-STATUSLINE_SCRIPT="$(cd "$(dirname "$0")" && pwd)/sessionhawk-statusline.sh"
+# Claude: same OAuth usage endpoint the CLI's /usage screen calls, token from
+# the Keychain. Codex: rollouts self-report rate_limits in token_count events.
+refresh_claude_limits() {
+    local tok resp
+    tok=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null \
+        | jq -r '.claudeAiOauth.accessToken // empty' 2>/dev/null)
+    [ -n "$tok" ] || return 1
+    resp=$(curl -sf -m 5 https://api.anthropic.com/api/oauth/usage \
+        -H "Authorization: Bearer $tok" \
+        -H "anthropic-beta: oauth-2025-04-20") || return 1
+    jq --argjson ts "$(date +%s)" '{
+        ts: $ts,
+        limits: [ (.limits // [])[] | {
+            kind, percent, severity,
+            reset: ((.resets_at // "") | sub("\\.[0-9]+"; "") | sub("\\+00:00$"; "Z")
+                    | try fromdateiso8601 catch null)
+        } ]
+    }' <<<"$resp" > "$STATE_DIR/limits.json.tmp" 2>/dev/null \
+        && mv "$STATE_DIR/limits.json.tmp" "$STATE_DIR/limits.json"
+}
+
 publish_limits() {
-    "$STATUSLINE_SCRIPT" --refresh >/dev/null 2>&1
+    refresh_claude_limits
     if [ -f "$STATE_DIR/limits.json" ]; then
         jq -c '{provider: "claude",
                 limits: [ .limits[] | {kind, percent, resetsAtEpoch: .reset} ]}' \
