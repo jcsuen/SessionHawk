@@ -40,6 +40,61 @@ public struct MenuBarView: View {
         }
     }
 
+    struct LimitRow {
+        let provider: AgentProvider
+        let limits: [ProviderLimit]
+    }
+
+    // Providers with known account limits, stable order, tightest-first gauges
+    @MainActor
+    private var limitRows: [LimitRow] {
+        AgentProvider.allCases.compactMap { provider in
+            guard var limits = sessionManager.providerLimits[provider], !limits.isEmpty else { return nil }
+            // Show the model-scoped weekly gauge only when it's the tighter constraint
+            if let all = limits.first(where: { $0.kind == "weekly_all" }),
+               let scoped = limits.first(where: { $0.kind == "weekly_scoped" }),
+               scoped.percent <= all.percent {
+                limits.removeAll { $0.kind == "weekly_scoped" }
+            }
+            return LimitRow(provider: provider, limits: limits)
+        }
+    }
+
+    private func limitColor(_ percent: Double) -> Color {
+        switch percent {
+        case 85...: return .red
+        case 60...: return .orange
+        default: return .secondary
+        }
+    }
+
+    private func resetText(_ limit: ProviderLimit) -> String? {
+        guard let date = limit.resetsAt else { return nil }
+        let mins = Int(date.timeIntervalSinceNow / 60)
+        guard mins > 0 else { return nil }
+        if mins >= 1440 { return "↻\(mins / 1440)d" }
+        if mins >= 60 { return "↻\(mins / 60)h\(mins % 60)m" }
+        return "↻\(mins)m"
+    }
+
+    @ViewBuilder
+    private func limitLine(_ row: LimitRow) -> some View {
+        HStack(spacing: 4) {
+            Text(row.provider.displayName)
+                .foregroundStyle(.secondary)
+            ForEach(row.limits) { limit in
+                Text("\(limit.shortLabel) \(Int(limit.percent))%")
+                    .foregroundStyle(limitColor(limit.percent))
+                    .fontWeight(limit.percent >= 85 ? .semibold : .regular)
+                if limit.kind == "session", let reset = resetText(limit) {
+                    Text(reset)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+        }
+        .font(.caption2)
+    }
+
     public init(sessionManager: SessionManager, updateChecker: UpdateChecker? = nil) {
         self.sessionManager = sessionManager
         self.updateChecker = updateChecker
@@ -68,6 +123,9 @@ public struct MenuBarView: View {
                             Text("Today: \(Self.compact(daily.outputTokens)) tokens · \(daily.turns) turns")
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
+                        }
+                        ForEach(limitRows, id: \.provider) { row in
+                            limitLine(row)
                         }
                     }
 

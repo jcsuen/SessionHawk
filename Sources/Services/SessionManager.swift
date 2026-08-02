@@ -11,9 +11,15 @@ public struct DailyStats: Codable, Sendable {
 public final class SessionManager {
     public private(set) var sessions: [AgentSession] = []
     public private(set) var dailyStats: DailyStats?
+    // Account-level usage limits per provider (Claude 5h/weekly, Codex windows)
+    public private(set) var providerLimits: [AgentProvider: [ProviderLimit]] = [:]
 
     public func updateDaily(_ stats: DailyStats) {
         dailyStats = stats
+    }
+
+    public func updateLimits(_ payload: LimitsPayload) {
+        providerLimits[payload.provider] = payload.limits
     }
     
     public init() {

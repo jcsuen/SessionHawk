@@ -139,6 +139,25 @@ public final class HookListener: Sendable {
                 manager.updateDaily(stats)
             }
             sendResponse(connection: connection, statusCode: 200, body: "{\"status\":\"ok\"}")
+        } else if method == "GET" && path == "/v1/limits" {
+            let manager = sessionManager
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                let byName = Dictionary(uniqueKeysWithValues: manager.providerLimits.map { ($0.key.rawValue, $0.value) })
+                let body = (try? JSONEncoder().encode(byName)).flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+                self.sendResponse(connection: connection, statusCode: 200, body: body)
+            }
+        } else if method == "POST" && path == "/v1/limits" {
+            guard let jsonData = bodyPart.data(using: .utf8),
+                  let payload = try? JSONDecoder().decode(LimitsPayload.self, from: jsonData) else {
+                sendResponse(connection: connection, statusCode: 400, body: "{\"error\":\"bad limits payload\"}")
+                return
+            }
+            let manager = sessionManager
+            Task { @MainActor in
+                manager.updateLimits(payload)
+            }
+            sendResponse(connection: connection, statusCode: 200, body: "{\"status\":\"ok\"}")
         } else if method == "POST" && path == "/v1/event" {
             guard let jsonData = bodyPart.data(using: .utf8) else {
                 sendResponse(connection: connection, statusCode: 400, body: "Invalid UTF-8 Body")

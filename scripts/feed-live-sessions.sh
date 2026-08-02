@@ -66,6 +66,44 @@ publish_daily() {
     echo "daily: ${out} output tokens, ${turns} turns${BOARD_NAME:+ (→ leaderboard as $BOARD_NAME)}"
 }
 
+# Account usage limits → POST /v1/limits, one payload per provider.
+# Claude: the statusline script maintains ~/.sessionhawk/limits.json from the
+# OAuth usage endpoint — refresh it here too so the app works without the
+# statusline. Codex: rollouts self-report rate_limits in token_count events.
+STATUSLINE_SCRIPT="$(cd "$(dirname "$0")" && pwd)/sessionhawk-statusline.sh"
+publish_limits() {
+    "$STATUSLINE_SCRIPT" --refresh >/dev/null 2>&1
+    if [ -f "$STATE_DIR/limits.json" ]; then
+        jq -c '{provider: "claude",
+                limits: [ .limits[] | {kind, percent, resetsAtEpoch: .reset} ]}' \
+            "$STATE_DIR/limits.json" 2>/dev/null \
+        | curl -s -m 2 -X POST http://localhost:9422/v1/limits \
+            -H "Content-Type: application/json" -d @- >/dev/null 2>&1
+    fi
+
+    local rollout
+    rollout=$(find "$HOME/.codex/sessions" -name 'rollout-*.jsonl' -mtime -2 2>/dev/null \
+              | xargs ls -t 2>/dev/null | head -n 1)
+    if [ -n "$rollout" ]; then
+        tail -n 400 "$rollout" 2>/dev/null | jq -Rrs '
+            [ split("\n")[] | fromjson? | select(.payload.type? == "token_count")
+              | .payload.rate_limits // empty ] | last // empty
+            | {provider: "codex", limits: [
+                (.primary // empty),
+                (.secondary // empty)
+              ] | map({
+                  kind: (if .window_minutes <= 360 then "session"
+                         elif .window_minutes <= 10080 then "weekly_all"
+                         else "monthly" end),
+                  percent: .used_percent,
+                  resetsAtEpoch: .resets_at
+              })}
+            | select(.limits | length > 0)' 2>/dev/null \
+        | curl -s -m 2 -X POST http://localhost:9422/v1/limits \
+            -H "Content-Type: application/json" -d @- >/dev/null 2>&1
+    fi
+}
+
 escape_json() {
     local value="$1"
     value="${value//\\/\\\\}"
@@ -280,6 +318,7 @@ discover_by_cmd() {
 if [ "${1:-}" = "--once" ]; then
     scan
     publish_daily
+    publish_limits
     exit 0
 fi
 
@@ -290,6 +329,7 @@ while true; do
     # Daily totals are a full-transcript parse — refresh every 10th pass (~5 min)
     if [ $((TICK % 10)) -eq 0 ]; then
         publish_daily
+        publish_limits
     fi
     TICK=$((TICK + 1))
     sleep "$POLL_INTERVAL"

@@ -96,6 +96,24 @@ let tests: [(String, @MainActor () -> Void)] = [
         m.purgeInactiveSessions()
         expect(m.sessions.count == 1, "live session kept")
     }),
+    ("provider limits stored and replaced per provider", {
+        let m = SessionManager()
+        m.updateLimits(LimitsPayload(provider: .claude, limits: [
+            ProviderLimit(kind: "session", percent: 16, resetsAtEpoch: 1_785_685_200),
+            ProviderLimit(kind: "weekly_all", percent: 12),
+        ]))
+        m.updateLimits(LimitsPayload(provider: .codex, limits: [
+            ProviderLimit(kind: "monthly", percent: 99),
+        ]))
+        expect(m.providerLimits[.claude]?.count == 2 && m.providerLimits[.codex]?.count == 1,
+               "limits stored per provider")
+        m.updateLimits(LimitsPayload(provider: .claude, limits: [
+            ProviderLimit(kind: "session", percent: 20),
+        ]))
+        expect(m.providerLimits[.claude]?.count == 1 && m.providerLimits[.claude]?[0].percent == 20,
+               "limits replaced on update")
+        expect(m.providerLimits[.claude]?[0].shortLabel == "5h", "session maps to 5h label")
+    }),
     ("usage percentage", {
         let usage = TokenUsage(inputTokens: 150_000, outputTokens: 10_000, totalLimit: 200_000)
         expect(abs(usage.usagePercentage - 80.0) < 0.001, "80% usage computed")

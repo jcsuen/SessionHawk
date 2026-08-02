@@ -38,6 +38,7 @@ cp assets/menubar-hawk.png "$APP/Contents/Resources/menubar-hawk.png"
 # self-contained — hooks and agents reference stable /Applications paths.
 mkdir -p "$APP/Contents/Resources/scripts" "$APP/Contents/Resources/launchd"
 cp scripts/sessionhawk-claude-hook.sh \
+   scripts/sessionhawk-statusline.sh \
    scripts/feed-live-sessions.sh \
    scripts/install-hooks.sh \
    scripts/uninstall.sh \
