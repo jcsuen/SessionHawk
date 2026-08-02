@@ -58,9 +58,13 @@ publish_daily() {
     curl -s -m 2 -X POST http://localhost:9422/v1/daily -H "Content-Type: application/json" \
         -d "{\"outputTokens\": $out, \"turns\": $turns}" >/dev/null 2>&1
     if [ -n "$BOARD_NAME" ] && [ -n "$DEVICE_ID" ]; then
+        # Work minutes power the board's leverage ranking (set by
+        # publish_workday, which runs first)
+        local mins_json=""
+        [ -n "$WALL_MINS" ] && mins_json=",\"wallMins\":$WALL_MINS,\"agentMins\":$AGENT_MINS"
         curl -s -m 5 -X POST "https://paulobuilds.com/sessionhawk/leaderboard" \
             -H "Content-Type: application/json" \
-            -d "{\"id\":\"$DEVICE_ID\",\"name\":\"$BOARD_NAME\",\"day\":\"$today\",\"out\":$out,\"turns\":$turns,\"agents\":$AGENT_COUNT}" \
+            -d "{\"id\":\"$DEVICE_ID\",\"name\":\"$BOARD_NAME\",\"day\":\"$today\",\"out\":$out,\"turns\":$turns,\"agents\":$AGENT_COUNT$mins_json}" \
             >/dev/null 2>&1
     fi
     echo "daily: ${out} output tokens, ${turns} turns${BOARD_NAME:+ (→ leaderboard as $BOARD_NAME)}"
@@ -85,15 +89,21 @@ active_minutes() {
           end' 2>/dev/null
 }
 
+# Sets WALL_MINS/AGENT_MINS globals — publish_daily reuses them for the
+# leaderboard's leverage metric, so run publish_workday first.
 publish_workday() {
-    local wall_mins agent_mins d mins
+    local d mins
+    WALL_MINS="" AGENT_MINS=""
+    local wall_mins
     wall_mins=$(active_minutes "$HOME/.claude/projects"/*/*.jsonl)
     [ -n "$wall_mins" ] && [ "$wall_mins" -gt 0 ] 2>/dev/null || return
-    agent_mins=0
+    local agent_mins=0
     for d in "$HOME/.claude/projects"/*/; do
         mins=$(active_minutes "$d"*.jsonl)
         [ -n "$mins" ] && [ "$mins" -gt 0 ] 2>/dev/null && agent_mins=$((agent_mins + mins))
     done
+    WALL_MINS=$wall_mins
+    AGENT_MINS=$agent_mins
     curl -s -m 5 -X POST "https://paulobuilds.com/sessionhawk/workday" \
         -H "Content-Type: application/json" \
         -d "{\"id\":\"$DEVICE_ID\",\"day\":\"$(date +%Y-%m-%d)\",\"wallMins\":$wall_mins,\"agentMins\":$agent_mins}" \
@@ -369,9 +379,9 @@ discover_by_cmd() {
 
 if [ "${1:-}" = "--once" ]; then
     scan
+    publish_workday
     publish_daily
     publish_limits
-    publish_workday
     exit 0
 fi
 
@@ -381,9 +391,9 @@ while true; do
     scan
     # Daily totals are a full-transcript parse — refresh every 10th pass (~5 min)
     if [ $((TICK % 10)) -eq 0 ]; then
+        publish_workday
         publish_daily
         publish_limits
-        publish_workday
     fi
     TICK=$((TICK + 1))
     sleep "$POLL_INTERVAL"
