@@ -27,6 +27,7 @@ public final class SessionManager {
         Timer.scheduledTimer(withTimeInterval: 10.0, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.purgeInactiveSessions()
+                self?.sendStaleWaitReminders()
             }
         }
     }
@@ -60,6 +61,9 @@ public final class SessionManager {
                     isStale = false
                 }
                 if !isStale {
+                    if newState != sessions[index].state {
+                        sessions[index].reminded = false
+                    }
                     sessions[index].state = newState
                     if let ts = payload.timestamp {
                         sessions[index].stateTimestamp = ts
@@ -116,6 +120,21 @@ public final class SessionManager {
         }
     }
     
+    // Sessions stuck in waitingForInput for 10+ minutes get one reminder —
+    // the original alert is easy to miss when you're deep in another session.
+    static let reminderAfterMs: Double = 600_000
+
+    public func sendStaleWaitReminders(now: Date = Date()) {
+        for index in sessions.indices {
+            guard sessions[index].state == .waitingForInput,
+                  !sessions[index].reminded,
+                  let ts = sessions[index].stateTimestamp,
+                  now.timeIntervalSince1970 * 1000 - ts > Self.reminderAfterMs else { continue }
+            sessions[index].reminded = true
+            NotificationManager.shared.sendStaleReminder(for: sessions[index])
+        }
+    }
+
     public func purgeInactiveSessions() {
         // Purge sessions where the process is no longer running (kill -0 fails)
         // or hasn't checked in for over 5 minutes (300 seconds)

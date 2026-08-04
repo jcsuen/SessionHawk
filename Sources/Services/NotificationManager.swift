@@ -126,6 +126,30 @@ public final class NotificationManager: NSObject, UNUserNotificationCenterDelega
         }
     }
 
+    // Follow-up when a waitingForInput session has been ignored for a while.
+    public func sendStaleReminder(for session: AgentSession) {
+        guard getenv("SESSIONHAWK_NO_NOTIFY") == nil else { return }
+        let title = "Still waiting on you"
+        let body = "\(session.provider.displayName) (\(session.terminalTitle ?? "PID \(session.pid)")) has been waiting 10+ minutes."
+        guard hasBundle else {
+            let esc = body.replacingOccurrences(of: "\"", with: "\\\"")
+            let script = "display notification \"\(esc)\" with title \"\(title)\""
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+            process.arguments = ["-e", script]
+            try? process.run()
+            return
+        }
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = UNNotificationSound.default
+        content.userInfo = ["pid": Int(session.pid), "terminalTitle": session.terminalTitle ?? ""]
+        UNUserNotificationCenter.current().add(
+            UNNotificationRequest(identifier: "sessionhawk-remind-\(session.pid)", content: content, trigger: nil)
+        ) { _ in }
+    }
+
     public func sendAlert(for session: AgentSession) {
         // Kill-switch for test runs and headless environments (getenv, not
         // ProcessInfo: tests set it after launch via setenv).

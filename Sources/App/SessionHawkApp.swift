@@ -53,6 +53,7 @@ struct SessionHawkApp: App {
             if waitingCount > 0 {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .symbolRenderingMode(.multicolor)
+                    .symbolEffect(.pulse, options: .repeating)
                 Text("\(waitingCount)")
                     .font(.caption.bold())
             } else if workingCount > 0 {

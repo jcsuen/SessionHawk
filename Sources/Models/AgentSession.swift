@@ -68,6 +68,9 @@ public struct AgentSession: Identifiable, Codable, Sendable {
     public var sessionOutputTokens: Int?
     public var sessionTurns: Int?
     public var firstSeen: Date
+    // A "still waiting on you" reminder was sent for the current wait;
+    // reset whenever the state changes so the next wait can remind again
+    public var reminded: Bool = false
 
     public init(id: UUID = UUID(),
                 pid: Int32,

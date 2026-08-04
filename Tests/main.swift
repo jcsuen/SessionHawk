@@ -114,6 +114,26 @@ let tests: [(String, @MainActor () -> Void)] = [
                "limits replaced on update")
         expect(m.providerLimits[.claude]?[0].shortLabel == "5h", "session maps to 5h label")
     }),
+    ("stale-wait reminder fires once then resets on state change", {
+        let m = SessionManager()
+        let elevenMinAgo = (Date().timeIntervalSince1970 - 660) * 1000
+        m.handleEvent(event(state: .waitingForInput, timestamp: elevenMinAgo))
+        m.sendStaleWaitReminders()
+        expect(m.sessions[0].reminded == true, "reminder marked after 10 min wait")
+        m.sendStaleWaitReminders()
+        expect(m.sessions[0].reminded == true, "no re-mark on second pass")
+        m.handleEvent(event(state: .working, timestamp: elevenMinAgo + 1))
+        expect(m.sessions[0].reminded == false, "reminded resets when state changes")
+        m.handleEvent(event(state: .waitingForInput, timestamp: elevenMinAgo + 2))
+        m.sendStaleWaitReminders()
+        expect(m.sessions[0].reminded == true, "next stale wait reminds again")
+    }),
+    ("fresh wait does not remind", {
+        let m = SessionManager()
+        m.handleEvent(event(state: .waitingForInput, timestamp: Date().timeIntervalSince1970 * 1000))
+        m.sendStaleWaitReminders()
+        expect(m.sessions[0].reminded == false, "fresh wait not reminded")
+    }),
     ("usage percentage", {
         let usage = TokenUsage(inputTokens: 150_000, outputTokens: 10_000, totalLimit: 200_000)
         expect(abs(usage.usagePercentage - 80.0) < 0.001, "80% usage computed")
