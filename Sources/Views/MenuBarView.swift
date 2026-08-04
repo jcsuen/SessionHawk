@@ -32,6 +32,17 @@ public struct MenuBarView: View {
 
     private var size: WindowSize { WindowSize(rawValue: windowSize) ?? .medium }
 
+    // Token counts mean nothing to most people — translate to words/novels.
+    // A token is ~¾ of an English word; a novel ~90k words.
+    static func tokensInWords(_ tokens: Int) -> String {
+        let words = tokens * 3 / 4
+        let novels = Double(words) / 90_000
+        if novels >= 1 {
+            return "≈ \(compact(words)) words — about \(novels < 10 ? String(format: "%.1f", novels) : String(Int(novels))) novels' worth of text"
+        }
+        return "≈ \(compact(words)) words of generated text"
+    }
+
     static func compact(_ n: Int) -> String {
         switch n {
         case 1_000_000...: return String(format: "%.1fM", Double(n) / 1_000_000)
@@ -123,6 +134,7 @@ public struct MenuBarView: View {
                             Text("Today: \(Self.compact(daily.outputTokens)) tokens · \(daily.turns) turns")
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
+                                .help(Self.tokensInWords(daily.outputTokens))
                         }
                         ForEach(limitRows, id: \.provider) { row in
                             limitLine(row)
