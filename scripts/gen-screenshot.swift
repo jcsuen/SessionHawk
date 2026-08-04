@@ -22,14 +22,28 @@ let sessions = [
     ),
     AgentSession(
         pid: 40112, provider: .gemini, state: .idle,
+        tokenUsage: TokenUsage(inputTokens: 48_040, outputTokens: 938, totalLimit: 1_000_000),
         workingDirectory: "/Users/dev/projects/data-pipeline"
     ),
 ]
 
 let header = HStack {
-    Text("SessionHawk")
-        .font(.headline)
-        .fontWeight(.bold)
+    VStack(alignment: .leading, spacing: 1) {
+        Text("SessionHawk")
+            .font(.headline)
+            .fontWeight(.bold)
+        Text("Today: 1.2M tokens · 981 turns")
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+        HStack(spacing: 4) {
+            Text("Claude Code").foregroundStyle(.secondary)
+            Text("5h 21%")
+            Text("↻2h10m").foregroundStyle(.tertiary)
+            Text("wk 12%")
+        }
+        .font(.caption2)
+        .foregroundStyle(.secondary)
+    }
     Spacer()
     Text("\(sessions.count) active sessions")
         .font(.caption)
