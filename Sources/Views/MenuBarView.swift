@@ -83,7 +83,10 @@ public struct MenuBarView: View {
         guard let date = limit.resetsAt else { return nil }
         let mins = Int(date.timeIntervalSinceNow / 60)
         guard mins > 0 else { return nil }
-        if mins >= 1440 { return "↻\(mins / 1440)d" }
+        if mins >= 1440 {
+            let h = (mins % 1440) / 60
+            return "↻\(mins / 1440)d" + (h > 0 ? "\(h)h" : "")
+        }
         if mins >= 60 { return "↻\(mins / 60)h\(mins % 60)m" }
         return "↻\(mins)m"
     }
@@ -97,7 +100,8 @@ public struct MenuBarView: View {
                 Text("\(limit.shortLabel) \(Int(limit.percent))%")
                     .foregroundStyle(limitColor(limit.percent))
                     .fontWeight(limit.percent >= 85 ? .semibold : .regular)
-                if limit.kind == "session", let reset = resetText(limit) {
+                // weekly_all and weekly_scoped share a reset — show it once
+                if limit.kind != "weekly_scoped", let reset = resetText(limit) {
                     Text(reset)
                         .foregroundStyle(.tertiary)
                 }
