@@ -134,6 +134,22 @@ let tests: [(String, @MainActor () -> Void)] = [
         m.sendStaleWaitReminders()
         expect(m.sessions[0].reminded == false, "fresh wait not reminded")
     }),
+    ("pace reserve math", {
+        let now = Date()
+        // 5h window, resets in 30 min → 90% elapsed; 30% used → +60 reserve
+        let ahead = ProviderLimit(kind: "session", percent: 30,
+                                  resetsAtEpoch: now.timeIntervalSince1970 + 1800)
+        expect(ahead.paceReserve(now: now) == 60, "under pace yields +60 reserve")
+        // 7d window, resets in 2d10h → ~65% elapsed; 80% used → ~-15 over
+        let behind = ProviderLimit(kind: "weekly_all", percent: 80,
+                                   resetsAtEpoch: now.timeIntervalSince1970 + 209_000)
+        let r = behind.paceReserve(now: now) ?? 0
+        expect(r <= -14 && r >= -16, "over pace yields ~-15")
+        // Unknown window kind → nil
+        let custom = ProviderLimit(kind: "mystery", percent: 50,
+                                   resetsAtEpoch: now.timeIntervalSince1970 + 1000)
+        expect(custom.paceReserve(now: now) == nil, "unknown window yields nil")
+    }),
     ("usage percentage", {
         let usage = TokenUsage(inputTokens: 150_000, outputTokens: 10_000, totalLimit: 200_000)
         expect(abs(usage.usagePercentage - 80.0) < 0.001, "80% usage computed")

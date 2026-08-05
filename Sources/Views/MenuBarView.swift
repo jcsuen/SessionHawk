@@ -105,9 +105,25 @@ public struct MenuBarView: View {
                     Text(reset)
                         .foregroundStyle(.tertiary)
                 }
+                // Pace warning only when burning ahead of a steady window burn;
+                // reserve details live in the tooltip to keep the row calm
+                if let pace = limit.paceReserve(), pace < 0 {
+                    Text("\(-pace)% over pace")
+                        .foregroundStyle(.red)
+                }
             }
         }
         .font(.caption2)
+        .help(paceSummary(row))
+    }
+
+    // Tooltip: full pace story per gauge, codexbar-style
+    private func paceSummary(_ row: LimitRow) -> String {
+        row.limits.compactMap { limit -> String? in
+            guard let pace = limit.paceReserve() else { return nil }
+            let state = pace >= 0 ? "\(pace)% in reserve" : "\(-pace)% over pace"
+            return "\(limit.shortLabel): \(Int(limit.percent))% used, \(state) vs steady burn"
+        }.joined(separator: "\n")
     }
 
     public init(sessionManager: SessionManager, updateChecker: UpdateChecker? = nil) {

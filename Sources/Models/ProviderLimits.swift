@@ -25,6 +25,26 @@ public struct ProviderLimit: Codable, Sendable, Identifiable {
         }
     }
 
+    /// Length of this limit's rolling window, when derivable from its kind.
+    public var windowSeconds: Double? {
+        switch kind {
+        case "session": return 5 * 3600
+        case "weekly_all", "weekly_scoped": return 7 * 86400
+        case "monthly": return 30 * 86400
+        default: return nil
+        }
+    }
+
+    /// Pace vs a steady burn through the window: positive = percentage points
+    /// in reserve, negative = points ahead of pace (headed for the limit).
+    public func paceReserve(now: Date = Date()) -> Int? {
+        guard let window = windowSeconds, let reset = resetsAt else { return nil }
+        let elapsed = window - reset.timeIntervalSince(now)
+        guard elapsed > 0, elapsed <= window else { return nil }
+        let expected = elapsed / window * 100
+        return Int((expected - percent).rounded())
+    }
+
     public init(kind: String, percent: Double, resetsAtEpoch: Double? = nil) {
         self.kind = kind
         self.percent = percent
