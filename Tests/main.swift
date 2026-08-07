@@ -134,6 +134,12 @@ let tests: [(String, @MainActor () -> Void)] = [
         m.sendStaleWaitReminders()
         expect(m.sessions[0].reminded == false, "fresh wait not reminded")
     }),
+    ("session ordering: needs-you first", {
+        expect(MenuBarView.statePriority(.waitingForInput) < MenuBarView.statePriority(.error)
+            && MenuBarView.statePriority(.error) < MenuBarView.statePriority(.working)
+            && MenuBarView.statePriority(.working) < MenuBarView.statePriority(.idle),
+            "waiting < error < working < idle")
+    }),
     ("pace reserve math", {
         let now = Date()
         // 5h window, resets in 30 min → 90% elapsed; 30% used → +60 reserve

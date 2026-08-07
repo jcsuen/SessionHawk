@@ -126,6 +126,25 @@ public struct MenuBarView: View {
         }.joined(separator: "\n")
     }
 
+    // Needs-you-first ordering: waiting (and errored) sessions on top, then
+    // working, then idle. firstSeen tie-break keeps rows from jumping around
+    // on every heartbeat.
+    @MainActor
+    private var orderedSessions: [AgentSession] {
+        sessionManager.sessions.sorted {
+            (Self.statePriority($0.state), $0.firstSeen) < (Self.statePriority($1.state), $1.firstSeen)
+        }
+    }
+
+    public static func statePriority(_ state: SessionState) -> Int {
+        switch state {
+        case .waitingForInput: return 0
+        case .error: return 1
+        case .working: return 2
+        case .idle: return 3
+        }
+    }
+
     public init(sessionManager: SessionManager, updateChecker: UpdateChecker? = nil) {
         self.sessionManager = sessionManager
         self.updateChecker = updateChecker
@@ -214,7 +233,7 @@ public struct MenuBarView: View {
                 } else {
                     ScrollView {
                         VStack(spacing: 8) {
-                            ForEach(sessionManager.sessions) { session in
+                            ForEach(orderedSessions) { session in
                                 SessionRowView(
                                     session: session,
                                     onFocus: {
