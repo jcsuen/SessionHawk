@@ -129,7 +129,8 @@ echo "$audit" > "$AUDIT_DIR/$DAY.json"
 heh=$(jq -r '.totalHours' <<<"$audit")
 
 if [ -n "$DEVICE_ID" ]; then
+    nc=$(jq -r '.commits | length' <<<"$audit")
     curl -s -m 5 -X POST "$ENDPOINT" -H "Content-Type: application/json" \
-        -d "{\"id\":\"$DEVICE_ID\",\"day\":\"$DAY\",\"humanHours\":$heh}" >/dev/null 2>&1
+        -d "{\"id\":\"$DEVICE_ID\",\"day\":\"$DAY\",\"humanHours\":$heh,\"commits\":$nc}" >/dev/null 2>&1
 fi
 echo "heh $DAY: $n commits ≈ ${heh}h human-equivalent (audit: $AUDIT_DIR/$DAY.json)"
