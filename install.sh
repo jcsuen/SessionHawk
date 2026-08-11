@@ -16,13 +16,16 @@ echo "🦅 SessionHawk installer"
 
 [ "$(uname -s)" = "Darwin" ] || { echo "❌ macOS only"; exit 1; }
 
+# jq powers token/limit stats but is not required for the core install —
+# session states and needs-you notifications work without it.
 if ! command -v jq >/dev/null 2>&1; then
     if command -v brew >/dev/null 2>&1; then
-        echo "▸ Installing jq (needed for context tracking)..."
-        brew install jq
+        echo "▸ Installing jq (live token/limit stats)..."
+        brew install jq || echo "⚠️  jq install failed — continuing without live token/limit stats"
     else
-        echo "❌ jq is required: install Homebrew (https://brew.sh) then 'brew install jq'"
-        exit 1
+        echo "⚠️  jq not found — continuing without it. Session states and notifications"
+        echo "   work fine; live token/limit stats activate once you install jq"
+        echo "   (https://jqlang.org or 'brew install jq')."
     fi
 fi
 
@@ -34,11 +37,11 @@ if [ -f "$SCRIPT_DIR/Package.swift" ]; then
     (cd "$SCRIPT_DIR" && ./scripts/make-app-bundle.sh)
 else
     echo "▸ Downloading latest release..."
-    url=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" \
-        | jq -r '[.assets[] | select(.name | endswith(".zip"))][0].browser_download_url // empty')
-    [ -n "$url" ] || { echo "❌ no release asset found — clone the repo and run ./install.sh"; exit 1; }
+    # Stable asset name → the /latest/download redirect needs no API JSON parsing
+    url="https://github.com/$REPO/releases/latest/download/SessionHawk-macOS-universal.zip"
     tmp=$(mktemp -d)
-    curl -fsSL "$url" -o "$tmp/SessionHawk.zip"
+    curl -fsSL "$url" -o "$tmp/SessionHawk.zip" \
+        || { echo "❌ download failed — clone the repo and run ./install.sh"; exit 1; }
     pkill -x SessionHawk 2>/dev/null || true
     rm -rf "$APP"
     ditto -xk "$tmp/SessionHawk.zip" /Applications

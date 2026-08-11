@@ -16,6 +16,17 @@
 SH_URL="http://localhost:9422/v1/event"
 POLL_INTERVAL=30
 
+# Everything below leans on jq. Without it (jq is optional at install time),
+# idle-wait instead of error-looping under launchd; heartbeats start the
+# moment jq appears on PATH.
+if ! command -v jq >/dev/null 2>&1; then
+    [ "${1:-}" = "--once" ] && { echo "feed-live-sessions: jq not found — skipping"; exit 0; }
+    until command -v jq >/dev/null 2>&1; do
+        echo "feed-live-sessions: jq not found — token/limit stats paused (install jq to enable)"
+        sleep 300
+    done
+fi
+
 # Context limit: SH_CONTEXT_LIMIT env wins; otherwise detect the 1M marker
 # ("[1m]") in the configured model in ~/.claude/settings.json; else 200k.
 detect_context_limit() {

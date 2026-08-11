@@ -89,15 +89,28 @@ if [ "$SHELL_TYPE" = "zsh" ]; then
     fi
     
 elif [ "$SHELL_TYPE" = "bash" ]; then
-    # Bash Hooks (using PROMPT_COMMAND)
+    # Bash hooks: PROMPT_COMMAND for waitingForInput, a DEBUG trap for the
+    # preexec-equivalent "working" signal (bash has no native preexec). The
+    # at-prompt flag limits the trap to the first command after each prompt.
     sessionhawk_bash_precmd() {
+        SESSIONHAWK_AT_PROMPT=1
         send_cw_event "waitingForInput" ""
     }
-    
-    # Note: Bash preexec is harder without third party hook libraries,
-    # so we primarily track waitingForInput state transitions via PROMPT_COMMAND.
+
+    sessionhawk_bash_preexec() {
+        [ -n "$COMP_LINE" ] && return                       # tab completion, not execution
+        # DEBUG fires once per PROMPT_COMMAND component — skip all of them
+        [[ ";$PROMPT_COMMAND;" == *";$BASH_COMMAND;"* ]] && return
+        [[ "$BASH_COMMAND" == sessionhawk_* ]] && return
+        [ -n "$SESSIONHAWK_AT_PROMPT" ] || return
+        SESSIONHAWK_AT_PROMPT=""
+        send_cw_event "working" "$BASH_COMMAND"
+    }
+
     if [[ "$PROMPT_COMMAND" != *"sessionhawk_bash_precmd"* ]]; then
         PROMPT_COMMAND="sessionhawk_bash_precmd;$PROMPT_COMMAND"
+        # Note: replaces any existing DEBUG trap — bash allows only one.
+        trap 'sessionhawk_bash_preexec' DEBUG
     fi
 fi
 

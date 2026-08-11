@@ -223,7 +223,12 @@ public struct MenuBarView: View {
                         Text("No active agent sessions")
                             .font(.callout)
                             .foregroundColor(.secondary)
-                        Text("Run sessionhawk-hook.sh in your terminal to monitor sessions.")
+                        Text("Sessions appear when a Claude Code, Codex, or Gemini CLI is running.")
+                            .font(.system(size: 10))
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                        Text("Claude sessions started before install: run /hooks once (or restart them).")
                             .font(.system(size: 10))
                             .foregroundColor(.secondary)
                             .multilineTextAlignment(.center)
@@ -285,7 +290,15 @@ public struct MenuBarView: View {
 
                     Spacer()
 
-                    // Right: window size selector
+                    // Right: config folder + window size selector
+                    Button(action: { ConfigFolder.open() }) {
+                        Image(systemName: "gearshape")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Open ~/.sessionhawk — all options documented in CONFIG.md there")
+
                     Picker("", selection: $windowSize) {
                         ForEach(WindowSize.allCases, id: \.rawValue) { s in
                             Text(s.rawValue).tag(s.rawValue)
