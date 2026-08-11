@@ -107,11 +107,30 @@ $(jq '[.[] | {sha, repo, msg, lines, excerpt}]' <<<"$commits_json")
 Reply with ONLY a JSON array, no prose, no code fences:
 [{\"sha\": \"...\", \"hours\": 1.5, \"basis\": \"one short sentence\"}]"
 
-estimates=$(claude -p "$prompt" 2>/dev/null | sed 's/^```json//; s/^```//; /^$/d')
-echo "$estimates" | jq -e 'type == "array"' >/dev/null 2>&1 || {
-    echo "heh $DAY: judge returned unparseable output; audit skipped" >&2
+# Judge call with retries: attempts 2-3 append a stricter format reminder.
+# HEH_CLAUDE_BIN override exists so tests can force the failure path.
+CLAUDE_BIN="${HEH_CLAUDE_BIN:-claude}"
+estimates=""
+for attempt in 1 2 3; do
+    extra=""
+    if [ "$attempt" -gt 1 ]; then
+        extra=$(printf '\n\nSTRICT FORMAT REMINDER (attempt %s): your ENTIRE reply must be one valid JSON array matching the schema above. First character "[", last character "]". No prose, no markdown, no code fences.' "$attempt")
+    fi
+    estimates=$("$CLAUDE_BIN" -p "$prompt$extra" 2>/dev/null | sed 's/^```json//; s/^```//; /^$/d')
+    if echo "$estimates" | jq -e 'type == "array"' >/dev/null 2>&1; then
+        break
+    fi
+    echo "heh $DAY: judge attempt $attempt returned unparseable output" >&2
+    estimates=""
+done
+if [ -z "$estimates" ]; then
+    # Visible failure marker so gaps are detectable instead of silent.
+    printf '{"day": "%s", "failed": true, "reason": "judge output unparseable after 3 attempts", "at": "%s"}\n' \
+        "$DAY" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$AUDIT_DIR/$DAY.failed.json"
+    echo "heh $DAY: FAILED — judge unparseable after 3 attempts (marker: $AUDIT_DIR/$DAY.failed.json)" >&2
     exit 1
-}
+fi
+rm -f "$AUDIT_DIR/$DAY.failed.json"
 
 # Clamp each estimate into its layer-1 band; sum.
 audit=$(jq -n --argjson commits "$commits_json" --argjson est "$estimates" '
