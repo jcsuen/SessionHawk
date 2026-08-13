@@ -12,10 +12,10 @@ public enum ConfigFolder {
     public static func prepare() -> URL {
         let dir = url
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        // Always rewritten: CONFIG.md is generated documentation, and stale
+        // docs are worse than no docs. User config lives in the other files.
         let readme = dir.appendingPathComponent("CONFIG.md")
-        if !FileManager.default.fileExists(atPath: readme.path) {
-            try? template.write(to: readme, atomically: true, encoding: .utf8)
-        }
+        try? template.write(to: readme, atomically: true, encoding: .utf8)
         return dir
     }
 
@@ -35,6 +35,10 @@ public enum ConfigFolder {
       file to opt out. Nickname only; no other identity is sent.
     - `limits.json` — cached Claude usage limits (written by the feeder; don't edit).
     - `heh/` — nightly human-equivalent-hours audit files, one JSON per day.
+    - `history/` — local session history, one plain-JSON file per day
+      (sessions, per-state time, token/turn totals). Stays on this Mac, is
+      never sent anywhere, and days older than 90 are deleted at app launch.
+      Delete the folder anytime to wipe history.
     - `id` — anonymous stable id used by the leaderboard (auto-generated).
 
     ## Environment variables

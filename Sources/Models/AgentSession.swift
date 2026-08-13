@@ -71,6 +71,19 @@ public struct AgentSession: Identifiable, Codable, Sendable {
     // A "still waiting on you" reminder was sent for the current wait;
     // reset whenever the state changes so the next wait can remind again
     public var reminded: Bool = false
+    // Local-history time accounting: completed seconds per state, plus when
+    // the current state began (folded into the buckets on change/snapshot)
+    public var stateSeconds: [String: Double] = [:]
+    public var stateChangedAt: Date
+
+    /// Fold time since the last fold into the current state's bucket.
+    public mutating func foldStateTime(now: Date = Date()) {
+        let elapsed = now.timeIntervalSince(stateChangedAt)
+        if elapsed > 0 {
+            stateSeconds[state.rawValue, default: 0] += elapsed
+        }
+        stateChangedAt = now
+    }
 
     public init(id: UUID = UUID(),
                 pid: Int32,
@@ -91,5 +104,6 @@ public struct AgentSession: Identifiable, Codable, Sendable {
         self.workingDirectory = workingDirectory
         self.commandLine = commandLine
         self.firstSeen = lastActive
+        self.stateChangedAt = lastActive
     }
 }

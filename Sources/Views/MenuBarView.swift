@@ -4,6 +4,7 @@ public struct MenuBarView: View {
     var sessionManager: SessionManager
     var updateChecker: UpdateChecker? = nil
     @State private var selectedSession: AgentSession? = nil
+    @State private var showHistory = false
     // MenuBarExtra windows cannot be drag-resized on macOS, so the size is a
     // persisted preference instead.
     @AppStorage("windowSize") private var windowSize: String = WindowSize.medium.rawValue
@@ -163,6 +164,10 @@ public struct MenuBarView: View {
                     }
                 )
                 .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .leading)))
+            } else if showHistory, let store = sessionManager.historyStore {
+                HistoryPanel(store: store, onDismiss: { showHistory = false })
+                    .frame(height: size.listHeight + 120)
+                    .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .leading)))
             } else {
                 HStack {
                     VStack(alignment: .leading, spacing: 1) {
@@ -290,7 +295,16 @@ public struct MenuBarView: View {
 
                     Spacer()
 
-                    // Right: config folder + window size selector
+                    // Right: history + config folder + window size selector
+                    if sessionManager.historyStore != nil {
+                        Button(action: { showHistory = true }) {
+                            Image(systemName: "clock.arrow.circlepath")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Session history — recent sessions and per-day totals (stored locally)")
+                    }
                     Button(action: { ConfigFolder.open() }) {
                         Image(systemName: "gearshape")
                             .font(.caption)

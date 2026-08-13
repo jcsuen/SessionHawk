@@ -156,6 +156,65 @@ let tests: [(String, @MainActor () -> Void)] = [
                                    resetsAtEpoch: now.timeIntervalSince1970 + 1000)
         expect(custom.paceReserve(now: now) == nil, "unknown window yields nil")
     }),
+    ("history store: upsert, merge, rollup, prune", {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("shawk-history-test-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let store = HistoryStore(directory: tmp)
+        let now = Date()
+        let id = UUID()
+
+        func record(_ id: UUID, firstSeen: Date, tokens: Int, working: Double) -> HistoryRecord {
+            HistoryRecord(id: id, provider: .claude, workingDirectory: "/x/proj",
+                          firstSeen: firstSeen, lastActive: firstSeen.addingTimeInterval(600),
+                          outputTokens: tokens, turns: 5,
+                          stateSeconds: [SessionState.working.rawValue: working])
+        }
+
+        // First snapshot, then an updated snapshot of the SAME session
+        store.upsert([record(id, firstSeen: now, tokens: 100, working: 60)])
+        store.upsert([record(id, firstSeen: now, tokens: 250, working: 120)])
+        let today = store.records(day: HistoryStore.dayKey(now))
+        expect(today.count == 1, "snapshot upsert merges by id, no duplicate")
+        expect(today.first?.outputTokens == 250, "later snapshot wins")
+
+        // A second session the same day → rollup math
+        store.upsert([record(UUID(), firstSeen: now.addingTimeInterval(-3600), tokens: 50, working: 30)])
+        let rollup = HistoryRollup.compute(store.records(day: HistoryStore.dayKey(now)))
+        expect(rollup.sessionCount == 2 && rollup.outputTokens == 300 && rollup.activeSeconds == 150,
+               "rollup sums sessions, tokens, working time")
+
+        // Old day file → pruned; recent one survives
+        let old = Calendar.current.date(byAdding: .day, value: -100, to: now)!
+        store.upsert([record(UUID(), firstSeen: old, tokens: 1, working: 1)])
+        expect(store.days(limit: 10).count == 2, "old day file written")
+        store.prune(keepDays: 90, now: now)
+        expect(store.records(day: HistoryStore.dayKey(old)).isEmpty, "90-day retention prunes old file")
+        expect(!store.records(day: HistoryStore.dayKey(now)).isEmpty, "recent day survives prune")
+    }),
+    ("state time folds into buckets", {
+        var s = AgentSession(pid: 1, provider: .claude, state: .working,
+                             lastActive: Date(timeIntervalSince1970: 1000))
+        s.foldStateTime(now: Date(timeIntervalSince1970: 1090))   // 90s working
+        s.state = .waitingForInput
+        s.foldStateTime(now: Date(timeIntervalSince1970: 1150))   // 60s waiting
+        expect(s.stateSeconds[SessionState.working.rawValue] == 90, "working seconds folded")
+        expect(s.stateSeconds[SessionState.waitingForInput.rawValue] == 60, "waiting seconds folded")
+        s.foldStateTime(now: Date(timeIntervalSince1970: 1100))   // clock going backwards
+        expect(s.stateSeconds[SessionState.waitingForInput.rawValue] == 60, "negative elapsed ignored")
+    }),
+    ("purged session lands in history", {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("shawk-history-test-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let m = SessionManager()
+        m.historyStore = HistoryStore(directory: tmp)
+        m.handleEvent(event(pid: 999_999, sessionOutputTokens: 4321, sessionTurns: 7))
+        m.purgeInactiveSessions()   // pid 999999 is dead → ends the session
+        let records = m.historyStore!.records(day: HistoryStore.dayKey(Date()))
+        expect(records.count == 1 && records.first?.outputTokens == 4321,
+               "ended session persisted with its totals")
+    }),
     ("usage percentage", {
         let usage = TokenUsage(inputTokens: 150_000, outputTokens: 10_000, totalLimit: 200_000)
         expect(abs(usage.usagePercentage - 80.0) < 0.001, "80% usage computed")

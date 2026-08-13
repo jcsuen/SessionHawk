@@ -13,6 +13,9 @@ public final class SessionManager {
     public private(set) var dailyStats: DailyStats?
     // Account-level usage limits per provider (Claude 5h/weekly, Codex windows)
     public private(set) var providerLimits: [AgentProvider: [ProviderLimit]] = [:]
+    // Local session history (nil in tests that don't exercise persistence)
+    public var historyStore: HistoryStore?
+    private var lastHistorySnapshot = Date.distantPast
 
     public func updateDaily(_ stats: DailyStats) {
         dailyStats = stats
@@ -28,6 +31,7 @@ public final class SessionManager {
             Task { @MainActor [weak self] in
                 self?.purgeInactiveSessions()
                 self?.sendStaleWaitReminders()
+                self?.snapshotHistoryIfDue()
             }
         }
     }
@@ -63,6 +67,7 @@ public final class SessionManager {
                 if !isStale {
                     if newState != sessions[index].state {
                         sessions[index].reminded = false
+                        sessions[index].foldStateTime(now: now)
                     }
                     sessions[index].state = newState
                     if let ts = payload.timestamp {
@@ -139,14 +144,41 @@ public final class SessionManager {
         // Purge sessions where the process is no longer running (kill -0 fails)
         // or hasn't checked in for over 5 minutes (300 seconds)
         let now = Date()
+        var ended: [HistoryRecord] = []
         sessions.removeAll { session in
             // Check if process exists using kill(pid, 0)
             let isRunning = kill(session.pid, 0) == 0
             let isExpired = now.timeIntervalSince(session.lastActive) > 300.0
-            
+
             // If process is dead or inactive for too long, purge it
-            return !isRunning || isExpired
+            if !isRunning || isExpired {
+                var final = session
+                // Count trailing time only up to when the session was last
+                // heard from — not up to the purge that noticed it was gone
+                final.foldStateTime(now: max(session.lastActive, session.stateChangedAt))
+                ended.append(HistoryRecord(from: final))
+                return true
+            }
+            return false
         }
+        if !ended.isEmpty {
+            historyStore?.upsert(ended)
+        }
+    }
+
+    // Snapshot live sessions to history every minute — bounds data loss on
+    // quit/crash to ≤60s without writing on every 10s timer tick.
+    static let historySnapshotInterval: TimeInterval = 60
+
+    public func snapshotHistoryIfDue(now: Date = Date()) {
+        guard let store = historyStore,
+              now.timeIntervalSince(lastHistorySnapshot) >= Self.historySnapshotInterval else { return }
+        lastHistorySnapshot = now
+        guard !sessions.isEmpty else { return }
+        for index in sessions.indices {
+            sessions[index].foldStateTime(now: now)
+        }
+        store.upsert(sessions.map { HistoryRecord(from: $0) })
     }
     
     public func removeSession(id: UUID) {

@@ -13,6 +13,11 @@ struct SessionHawkApp: App {
         // to appear would leave port 9422 closed until the user clicks the icon.
         let manager = MainActor.assumeIsolated { SessionManager() }
         _sessionManager = State(initialValue: manager)
+        MainActor.assumeIsolated {
+            let store = HistoryStore()
+            store.prune()   // retention enforced once per launch
+            manager.historyStore = store
+        }
         hookListener = HookListener(sessionManager: manager)
         hookListener.start()
         let checker = MainActor.assumeIsolated { UpdateChecker() }
